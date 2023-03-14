@@ -1,5 +1,8 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap};
+
+use crate::loop_contex::LoopContext;
+use crate::squad_loader::per_room_squads;
 
 use log::*;
 use screeps::{
@@ -8,7 +11,11 @@ use screeps::{
 };
 use wasm_bindgen::prelude::*;
 
+mod api_call;
 mod logging;
+mod loop_contex;
+mod my_memory;
+mod squad_loader;
 
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
@@ -33,6 +40,13 @@ enum CreepTarget {
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
     debug!("loop starting! CPU: {}", game::cpu::get_used());
+    let _loop_context = LoopContext::new();
+    for room in _loop_context.visible_rooms.iter() {
+        // TODO RefCell here
+        per_room_squads(&_loop_context, room);
+    }
+    return info!("loop starting! CPU: {}", game::cpu::get_used());
+
     // mutably borrow the creep_targets refcell, which is holding our creep target locks
     // in the wasm heap
     CREEP_TARGETS.with(|creep_targets_refcell| {
@@ -88,10 +102,12 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
 
     let target = creep_targets.entry(name);
     match target {
-         Entry::Occupied(entry) => {
+        Entry::Occupied(entry) => {
             let creep_target = entry.get();
             match creep_target {
-                CreepTarget::Upgrade(controller_id) if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 => {
+                CreepTarget::Upgrade(controller_id)
+                    if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 =>
+                {
                     if let Some(controller) = controller_id.resolve() {
                         let r = creep.upgrade_controller(&controller);
                         if r == ReturnCode::NotInRange {
@@ -104,7 +120,9 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                         entry.remove();
                     }
                 }
-                CreepTarget::Harvest(source_id) if creep.store().get_free_capacity(Some(ResourceType::Energy)) > 0 => {
+                CreepTarget::Harvest(source_id)
+                    if creep.store().get_free_capacity(Some(ResourceType::Energy)) > 0 =>
+                {
                     if let Some(source) = source_id.resolve() {
                         if creep.pos().is_near_to(source.pos()) {
                             let r = creep.harvest(&source);
@@ -118,8 +136,10 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     } else {
                         entry.remove();
                     }
-                },
-                _ => { entry.remove(); }
+                }
+                _ => {
+                    entry.remove();
+                }
             };
         }
         Entry::Vacant(entry) => {
