@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use js_sys::JsString;
-use log::{debug, info};
+use log::{info};
 use screeps::{game, RawMemory, SharedCreepProperties};
 use serde_json::Result;
-use web_sys::console::debug;
+
 
 use crate::my_memory::MyMemory;
 

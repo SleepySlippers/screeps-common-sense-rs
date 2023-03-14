@@ -12,6 +12,6 @@ pub trait PerRoomSquad: Squad {
     fn new(loop_context: &mut LoopContext, room: &Room) -> Self;
 }
 
-pub fn per_room_squads(loop_context: &LoopContext, room: &Room) -> &'static [&'static dyn Squad] {
+pub fn per_room_squads(_loop_context: &LoopContext, _room: &Room) -> &'static [&'static dyn Squad] {
     &[]
 }
