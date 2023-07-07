@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 use js_sys::JsString;
 use log::{info};
-use screeps::{game, RawMemory, SharedCreepProperties};
+use screeps::{game, raw_memory, SharedCreepProperties};
 use serde_json::Result;
 
 
 use crate::my_memory::MyMemory;
 
 pub fn get_memory() -> MyMemory {
-    let raw_memory_str = RawMemory::get().as_string().unwrap();
+    let raw_memory_str = raw_memory::get().as_string().unwrap();
     info!("{}", raw_memory_str);
     let keys = game::creeps().keys();
     info!("hehe {}", keys.collect::<Vec<String>>().join(","));
@@ -26,7 +26,7 @@ pub fn get_memory() -> MyMemory {
 }
 
 pub fn set_memory(my_memory: &MyMemory) {
-    RawMemory::set(
+    raw_memory::set(
         &JsString::from_str(serde_json::to_string(my_memory).unwrap().as_str()).unwrap(),
     );
 }

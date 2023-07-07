@@ -6,8 +6,8 @@ use crate::squad_loader::per_room_squads;
 
 use log::*;
 use screeps::{
-    find, game, prelude::*, Creep, ObjectId, Part, ResourceType, ReturnCode, RoomObjectProperties,
-    Source, StructureController, StructureObject,
+    find, game, prelude::*, Creep, ObjectId, Part, ResourceType, RoomObjectProperties, Source,
+    StructureController, StructureObject,
 };
 use wasm_bindgen::prelude::*;
 
@@ -82,10 +82,9 @@ pub fn game_loop() {
             let res = spawn.spawn_creep(&body, &name);
 
             // todo once fixed in branch this should be ReturnCode::Ok instead of this i8 grumble grumble
-            if res != ReturnCode::Ok {
-                warn!("couldn't spawn: {:?}", res);
-            } else {
-                additional += 1;
+            match res {
+                Err(err) => warn!("couldn't spawn: {:?}", err),
+                Ok(()) => additional += 1,
             }
         }
     }
@@ -110,11 +109,15 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                 {
                     if let Some(controller) = controller_id.resolve() {
                         let r = creep.upgrade_controller(&controller);
-                        if r == ReturnCode::NotInRange {
-                            creep.move_to(&controller);
-                        } else if r != ReturnCode::Ok {
-                            warn!("couldn't upgrade: {:?}", r);
-                            entry.remove();
+                        match r {
+                            Err(screeps::ErrorCode::NotInRange) => {
+                                creep.move_to(&controller);
+                            }
+                            Ok(()) => (),
+                            _ => {
+                                warn!("couldn't upgrade: {:?}", r);
+                                entry.remove();
+                            }
                         }
                     } else {
                         entry.remove();
@@ -126,9 +129,12 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     if let Some(source) = source_id.resolve() {
                         if creep.pos().is_near_to(source.pos()) {
                             let r = creep.harvest(&source);
-                            if r != ReturnCode::Ok {
-                                warn!("couldn't harvest: {:?}", r);
-                                entry.remove();
+                            match r {
+                                Ok(()) => (),
+                                _ => {
+                                    warn!("couldn't harvest: {:?}", r);
+                                    entry.remove();
+                                }
                             }
                         } else {
                             creep.move_to(&source);
