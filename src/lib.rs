@@ -1,21 +1,23 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::loop_contex::LoopContext;
-use crate::squad_loader::per_room_squads;
-
 use log::*;
 use screeps::{
-    find, game, prelude::*, Creep, ObjectId, Part, ResourceType, RoomObjectProperties, Source,
-    StructureController, StructureObject,
+    constants::{ErrorCode, Part, ResourceType},
+    enums::StructureObject,
+    find, game,
+    local::ObjectId,
+    objects::{Creep, Source, StructureController},
+    prelude::*,
 };
 use wasm_bindgen::prelude::*;
+use web_sys::console::info;
 
-mod api_call;
 mod logging;
 mod loop_contex;
-mod my_memory;
 mod squad_loader;
+mod api_call;
+mod my_memory;
 
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
@@ -29,7 +31,9 @@ thread_local! {
     static CREEP_TARGETS: RefCell<HashMap<String, CreepTarget>> = RefCell::new(HashMap::new());
 }
 
-// this enum will represent a creep's lock on a specific target object, storing a js reference to the object id so that we can grab a fresh reference to the object each successive tick, since screeps game objects become 'stale' and shouldn't be used beyond the tick they were fetched
+// this enum will represent a creep's lock on a specific target object, storing a js reference
+// to the object id so that we can grab a fresh reference to the object each successive tick,
+// since screeps game objects become 'stale' and shouldn't be used beyond the tick they were fetched
 #[derive(Clone)]
 enum CreepTarget {
     Upgrade(ObjectId<StructureController>),
@@ -40,10 +44,11 @@ enum CreepTarget {
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
     debug!("loop starting! CPU: {}", game::cpu::get_used());
-    let _loop_context = LoopContext::new();
+    let _loop_context = loop_contex::LoopContext::new();
+    info!("hereerer: {}", _loop_context.visible_rooms.len());
     for room in _loop_context.visible_rooms.iter() {
         // TODO RefCell here
-        per_room_squads(&_loop_context, room);
+        squad_loader::per_room_squads(&_loop_context, room);
     }
     return info!("loop starting! CPU: {}", game::cpu::get_used());
 
@@ -52,21 +57,12 @@ pub fn game_loop() {
     CREEP_TARGETS.with(|creep_targets_refcell| {
         let mut creep_targets = creep_targets_refcell.borrow_mut();
         debug!("running creeps");
-        // same type conversion (and type assumption) as the spawn loop
         for creep in game::creeps().values() {
             run_creep(&creep, &mut creep_targets);
         }
     });
 
     debug!("running spawns");
-    // Game::spawns returns a `js_sys::Object`, which is a light reference to an
-    // object of any kind which is held on the javascript heap.
-    //
-    // Object::values returns a `js_sys::Array`, which contains the member spawn objects
-    // representing all the spawns you control.
-    //
-    // They are returned as wasm_bindgen::JsValue references, which we can safely
-    // assume are StructureSpawn objects as returned from js without checking first
     let mut additional = 0;
     for spawn in game::spawns().values() {
         debug!("running spawn {}", String::from(spawn.name()));
@@ -79,12 +75,9 @@ pub fn game_loop() {
             // note that this bot has a fatal flaw; spawning a creep
             // creates Memory.creeps[creep_name] which will build up forever;
             // these memory entries should be prevented (todo doc link on how) or cleaned up
-            let res = spawn.spawn_creep(&body, &name);
-
-            // todo once fixed in branch this should be ReturnCode::Ok instead of this i8 grumble grumble
-            match res {
-                Err(err) => warn!("couldn't spawn: {:?}", err),
+            match spawn.spawn_creep(&body, &name) {
                 Ok(()) => additional += 1,
+                Err(e) => warn!("couldn't spawn: {:?}", e),
             }
         }
     }
@@ -108,17 +101,17 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                     if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 =>
                 {
                     if let Some(controller) = controller_id.resolve() {
-                        let r = creep.upgrade_controller(&controller);
-                        match r {
-                            Err(screeps::ErrorCode::NotInRange) => {
-                                creep.move_to(&controller);
-                            }
-                            Ok(()) => (),
-                            _ => {
-                                warn!("couldn't upgrade: {:?}", r);
-                                entry.remove();
-                            }
-                        }
+                        creep
+                            .upgrade_controller(&controller)
+                            .unwrap_or_else(|e| match e {
+                                ErrorCode::NotInRange => {
+                                    let _ = creep.move_to(&controller);
+                                }
+                                _ => {
+                                    warn!("couldn't upgrade: {:?}", e);
+                                    entry.remove();
+                                }
+                            });
                     } else {
                         entry.remove();
                     }
@@ -128,16 +121,12 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
                 {
                     if let Some(source) = source_id.resolve() {
                         if creep.pos().is_near_to(source.pos()) {
-                            let r = creep.harvest(&source);
-                            match r {
-                                Ok(()) => (),
-                                _ => {
-                                    warn!("couldn't harvest: {:?}", r);
-                                    entry.remove();
-                                }
-                            }
+                            creep.harvest(&source).unwrap_or_else(|e| {
+                                warn!("couldn't harvest: {:?}", e);
+                                entry.remove();
+                            });
                         } else {
-                            creep.move_to(&source);
+                            let _ = creep.move_to(&source);
                         }
                     } else {
                         entry.remove();

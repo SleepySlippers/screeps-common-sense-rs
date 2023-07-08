@@ -11,13 +11,6 @@ use crate::my_memory::MyMemory;
 pub fn get_memory() -> MyMemory {
     let raw_memory_str = raw_memory::get().as_string().unwrap();
     info!("{}", raw_memory_str);
-    let keys = game::creeps().keys();
-    info!("hehe {}", keys.collect::<Vec<String>>().join(","));
-    let values = game::creeps().values();
-    info!(
-        "lulu {}",
-        values.map(|c| c.name()).collect::<Vec<String>>().join(",")
-    );
     let res: Result<MyMemory> = serde_json::from_str(raw_memory_str.as_str());
     match res {
         Ok(my_memory) => my_memory,
@@ -26,7 +19,8 @@ pub fn get_memory() -> MyMemory {
 }
 
 pub fn set_memory(my_memory: &MyMemory) {
+    let serialized = serde_json::to_string(my_memory).unwrap();
     raw_memory::set(
-        &JsString::from_str(serde_json::to_string(my_memory).unwrap().as_str()).unwrap(),
+        &JsString::from_str(serialized.as_str()).unwrap(),
     );
 }
